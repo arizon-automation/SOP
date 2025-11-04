@@ -106,26 +106,105 @@ export async function extractImagesFromWord(fileUrl: string): Promise<{
 }
 
 /**
- * 从PDF提取图片（使用pdf.js）
+ * 从PDF提取图片（使用pdf-lib）
  */
 export async function extractImagesFromPDF(fileUrl: string): Promise<ExtractedImage[]> {
   console.log('🖼️ 开始提取PDF文档中的图片...');
   
   try {
-    // 注意：pdf-parse不支持图片提取
-    // 需要使用pdf.js或pdf-lib
-    // 这里我们先返回空数组，如果需要PDF图片提取，需要安装额外的库
-    console.warn('⚠️ PDF图片提取需要额外的库，当前版本暂不支持');
-    console.warn('⚠️ 建议：如果文档包含重要图片，请使用Word格式上传');
+    const { PDFDocument, PDFName } = await import('pdf-lib');
     
-    return [];
+    // 下载PDF文件
+    const buffer = await downloadFile(fileUrl);
+    const pdfDoc = await PDFDocument.load(buffer);
     
-    // TODO: 如果需要PDF图片提取，可以使用以下方案：
-    // 1. 使用pdf.js: npm install pdfjs-dist
-    // 2. 使用pdf-lib: npm install pdf-lib
-    // 3. 或使用在线服务API
+    const extractedImages: ExtractedImage[] = [];
+    let imageIndex = 0;
+    
+    // 遍历每一页
+    const pages = pdfDoc.getPages();
+    console.log(`📄 PDF共 ${pages.length} 页`);
+    
+    for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+      const page = pages[pageIndex];
+      
+      // 获取页面资源
+      const resources = page.node.Resources();
+      if (!resources) continue;
+      
+      const xObjects = resources.lookup(PDFName.of('XObject'));
+      if (!xObjects) continue;
+      
+      // 遍历XObject（包含图片）
+      const xObjectKeys = (xObjects as any).entries();
+      
+      for (const [key, xObject] of xObjectKeys) {
+        try {
+          const subtype = xObject.lookup(PDFName.of('Subtype'));
+          
+          // 检查是否是图片
+          if (subtype && subtype.toString() === '/Image') {
+            const imageData = xObject.lookup(PDFName.of('Filter'));
+            
+            // 提取图片数据
+            let imageBytes: Uint8Array;
+            const stream = xObject as any;
+            
+            if (stream.contents) {
+              imageBytes = stream.contents;
+            } else {
+              continue;
+            }
+            
+            // 判断图片格式
+            let contentType = 'image/jpeg';
+            let ext = 'jpg';
+            
+            if (imageData) {
+              const filter = imageData.toString();
+              if (filter.includes('DCTDecode')) {
+                contentType = 'image/jpeg';
+                ext = 'jpg';
+              } else if (filter.includes('FlateDecode')) {
+                contentType = 'image/png';
+                ext = 'png';
+              }
+            }
+            
+            // 生成文件名并上传
+            const filename = generateUniqueFilename(`pdf-image-p${pageIndex + 1}-${imageIndex}.${ext}`);
+            const file = new File([imageBytes], filename, { type: contentType });
+            
+            const { url } = await uploadFile(file, filename);
+            
+            extractedImages.push({
+              index: imageIndex,
+              filename,
+              url,
+              contentType,
+            });
+            
+            console.log(`✅ PDF图片 ${imageIndex} 已提取: ${filename} (第${pageIndex + 1}页)`);
+            imageIndex++;
+          }
+        } catch (error) {
+          console.error(`⚠️ 提取图片失败 (页${pageIndex + 1}):`, error);
+          // 继续处理其他图片
+        }
+      }
+    }
+    
+    if (extractedImages.length === 0) {
+      console.warn('⚠️ PDF中未发现图片');
+      console.warn('💡 提示: 如果PDF包含重要图片，请确保图片是嵌入式的，而非扫描件');
+    } else {
+      console.log(`✅ PDF图片提取完成: ${extractedImages.length} 张`);
+    }
+    
+    return extractedImages;
   } catch (error: any) {
     console.error('❌ PDF图片提取失败:', error);
+    console.warn('💡 如果需要保留图片，建议将PDF转换为Word格式后再上传');
     return [];
   }
 }
