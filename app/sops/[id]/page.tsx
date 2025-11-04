@@ -7,6 +7,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslation, useLanguage } from '@/contexts/LanguageContext';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 interface SOP {
   id: number;
@@ -43,6 +45,8 @@ interface SOPImage {
 
 export default function SOPDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const [sop, setSOP] = useState<SOP | null>(null);
   const [translationPair, setTranslationPair] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -51,6 +55,17 @@ export default function SOPDetailPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     loadSOP();
   }, [params.id]);
+
+  // 当语言切换时，如果有对应的翻译版本，则跳转
+  useEffect(() => {
+    if (!sop || !translationPair) return;
+    
+    // 如果当前SOP的语言与选择的语言不匹配，且有翻译版本
+    if (sop.language !== language && translationPair) {
+      // 跳转到翻译版本
+      router.push(`/sops/${translationPair.id}`);
+    }
+  }, [language, sop, translationPair, router]);
 
   const loadSOP = async () => {
     try {
@@ -108,7 +123,7 @@ export default function SOPDetailPage({ params }: { params: { id: string } }) {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">加载中...</p>
+          <p className="text-gray-600">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -135,18 +150,21 @@ export default function SOPDetailPage({ params }: { params: { id: string } }) {
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                     sop.language === 'zh' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
                   }`}>
-                    {sop.language === 'zh' ? '中文' : 'English'}
+                    {sop.language === 'zh' ? t('sops.chinese') : t('sops.english')}
                   </span>
                 </div>
-                <p className="text-sm text-gray-600">SOP详情 · {sop.department} · {sop.category}</p>
+                <p className="text-sm text-gray-600">{t('sops.detail')} · {sop.department} · {sop.category}</p>
               </div>
             </div>
-            <Link
-              href="/sops"
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
-            >
-              ← 返回列表
-            </Link>
+            <div className="flex items-center gap-4">
+              <LanguageSwitcher />
+              <Link
+                href="/sops"
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
+              >
+                ← {t('sops.backToList')}
+              </Link>
+            </div>
           </div>
         </div>
       </header>

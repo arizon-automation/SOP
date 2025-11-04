@@ -7,6 +7,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslation } from '@/contexts/LanguageContext';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 interface User {
   id: number;
@@ -19,6 +21,7 @@ interface User {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -57,7 +60,7 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">加载中...</p>
+          <p className="text-gray-600">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -74,10 +77,11 @@ export default function DashboardPage() {
             <span className="text-3xl">📋</span>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Arizon SOP System</h1>
-              <p className="text-sm text-gray-600">欢迎回来, {user.username}</p>
+              <p className="text-sm text-gray-600">{t('dashboard.welcome')}, {user.username}</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <LanguageSwitcher />
             <div className="text-right">
               <p className="text-sm font-medium text-gray-900">{user.username}</p>
               <p className="text-xs text-gray-500">{user.role} · {user.department}</p>
@@ -86,7 +90,7 @@ export default function DashboardPage() {
               onClick={handleLogout}
               className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors"
             >
-              登出
+              {t('nav.logout')}
             </button>
           </div>
         </div>
@@ -96,8 +100,8 @@ export default function DashboardPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Card */}
         <div className="bg-gradient-to-r from-primary-500 to-primary-700 rounded-2xl p-8 text-white mb-8">
-          <h2 className="text-3xl font-bold mb-2">欢迎使用 SOP 管理系统</h2>
-          <p className="text-blue-100">AI驱动的全球化标准操作流程管理平台</p>
+          <h2 className="text-3xl font-bold mb-2">{t('dashboard.title')}</h2>
+          <p className="text-blue-100">{t('dashboard.title')}</p>
         </div>
 
         {/* Feature Grid */}
@@ -111,13 +115,13 @@ export default function DashboardPage() {
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-2xl">
                 📄
               </div>
-              <h3 className="text-lg font-bold text-gray-900">文档管理</h3>
+              <h3 className="text-lg font-bold text-gray-900">{t('dashboard.documentsTitle')}</h3>
             </div>
             <p className="text-gray-600 text-sm mb-3">
-              上传和管理PDF、Word文档，AI自动解析流程结构
+              {t('dashboard.documentsDesc')}
             </p>
             <div className="text-primary-500 text-sm font-medium">
-              查看文档 →
+              {t('nav.documents')} →
             </div>
           </Link>
 
@@ -135,13 +139,13 @@ export default function DashboardPage() {
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-2xl">
                 📋
               </div>
-              <h3 className="text-lg font-bold text-gray-900">SOP管理</h3>
+              <h3 className="text-lg font-bold text-gray-900">{t('dashboard.sopsTitle')}</h3>
             </div>
             <p className="text-gray-600 text-sm mb-3">
-              查看AI生成的标准操作流程（中英文双语）
+              {t('dashboard.sopsDesc')}
             </p>
             <div className="text-primary-500 text-sm font-medium">
-              查看SOP →
+              {t('nav.sops')} →
             </div>
           </Link>
 

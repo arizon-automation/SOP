@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 
 export const metadata: Metadata = {
   title: "Arizon SOP System - AI驱动的SOP管理系统",
@@ -14,7 +15,9 @@ export default function RootLayout({
   return (
     <html lang="zh">
       <body className="antialiased">
-        {children}
+        <LanguageProvider>
+          {children}
+        </LanguageProvider>
       </body>
     </html>
   );
