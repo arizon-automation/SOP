@@ -5,6 +5,7 @@
 
 import { parseDocument, cleanText } from './document-parser';
 import { analyzeDocument, translateSOP, type ParsedSOP } from './ai-analyzer';
+import { analyzeDocumentWithChunking } from './content-chunker';
 import { extractImages, type ExtractedImage } from './image-extractor';
 import { query, transaction } from '@/lib/db';
 import type { PoolClient } from 'pg';
@@ -60,9 +61,9 @@ export async function generateSOPFromDocument(
       [cleanedContent, documentId]
     );
 
-    // 4. AI分析文档结构
+    // 4. AI分析文档结构（使用分块处理支持长文档）
     console.log('🤖 Step 3: AI分析...');
-    const parsedSOP = await analyzeDocument(cleanedContent);
+    const parsedSOP = await analyzeDocumentWithChunking(cleanedContent);
     
     // 将图片信息添加到SOP元数据
     if (images.length > 0) {
