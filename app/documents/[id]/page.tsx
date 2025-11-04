@@ -22,6 +22,13 @@ interface Document {
   uploaded_by_name: string;
 }
 
+interface ConflictAnalysis {
+  hasConflicts: boolean;
+  hasDuplicates: boolean;
+  relatedSOPs: any[];
+  suggestions: any[];
+}
+
 export default function DocumentDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [document, setDocument] = useState<Document | null>(null);
@@ -30,6 +37,10 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
   const [parsing, setParsing] = useState(false);
   const [parseSuccess, setParseSuccess] = useState(false);
   const [parseError, setParseError] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [conflicts, setConflicts] = useState<ConflictAnalysis | null>(null);
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const [merging, setMerging] = useState(false);
 
   useEffect(() => {
     loadDocument();
@@ -83,11 +94,44 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
     }
   };
 
-  const handleParse = async () => {
-    if (!confirm('开始AI解析吗？这可能需要30-60秒。')) {
-      return;
-    }
+  const handleAnalyzeConflicts = async () => {
+    setAnalyzing(true);
+    setParseError('');
 
+    try {
+      const res = await fetch(`/api/documents/${params.id}/analyze-conflicts`, {
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '冲突分析失败');
+      }
+
+      const data = await res.json();
+      setConflicts(data.conflictAnalysis);
+
+      // 刷新文档状态
+      await loadDocument();
+
+      // 如果有冲突或重复，显示合并对话框
+      if (data.conflictAnalysis.hasConflicts || data.conflictAnalysis.hasDuplicates) {
+        setShowMergeDialog(true);
+      } else {
+        // 没有冲突，直接创建新SOP
+        if (confirm('没有发现冲突或重复，是否直接创建新SOP？')) {
+          await handleCreateNewSOP();
+        }
+      }
+    } catch (error: any) {
+      console.error('冲突分析失败:', error);
+      setParseError(error.message);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleCreateNewSOP = async () => {
     setParsing(true);
     setParseError('');
     setParseSuccess(false);
@@ -108,7 +152,7 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
       // 刷新文档状态
       await loadDocument();
 
-      // 3秒后跳转到SOP列表
+      // 2秒后跳转到SOP详情页
       setTimeout(() => {
         router.push(`/sops/${data.sop.zh.id}`);
       }, 2000);
@@ -117,6 +161,36 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
       setParseError(error.message);
     } finally {
       setParsing(false);
+    }
+  };
+
+  const handleMerge = async (targetSOPId: number, strategy: string) => {
+    setMerging(true);
+    setParseError('');
+
+    try {
+      const res = await fetch(`/api/documents/${params.id}/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetSOPId, mergeStrategy: strategy }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '合并失败');
+      }
+
+      const data = await res.json();
+      alert(`合并成功！已更新SOP: ${data.sop.title}`);
+      
+      // 跳转到更新后的SOP
+      router.push(`/sops/${targetSOPId}`);
+    } catch (error: any) {
+      console.error('合并失败:', error);
+      alert(`合并失败：${error.message}`);
+    } finally {
+      setMerging(false);
+      setShowMergeDialog(false);
     }
   };
 

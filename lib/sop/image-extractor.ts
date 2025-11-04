@@ -47,8 +47,8 @@ export async function extractImagesFromWord(fileUrl: string): Promise<{
     const extractedImages: ExtractedImage[] = [];
     let imageIndex = 0;
     
-    // 使用mammoth提取图片并转换为HTML（包含占位符）
-    const result = await mammoth.convertToHtml(
+    // 使用mammoth提取图片并转换为Markdown格式（包含占位符）
+    const result = await mammoth.convertToMarkdown(
       { buffer },
       {
         convertImage: mammoth.images.imgElement(async (image) => {
@@ -79,7 +79,7 @@ export async function extractImagesFromWord(fileUrl: string): Promise<{
             
             imageIndex++;
             
-            // 返回包含占位符的img标签
+            // 返回占位符文本（Markdown会保留这个）
             return { src: `[图片${currentIndex}]` };
           } catch (error) {
             console.error('图片提取失败:', error);
@@ -89,13 +89,12 @@ export async function extractImagesFromWord(fileUrl: string): Promise<{
       }
     );
     
-    // 提取纯文本（包含图片占位符）
-    const textResult = await mammoth.extractRawText({ buffer });
-    
     console.log(`✅ Word文档图片提取完成: ${extractedImages.length} 张`);
+    
+    // 返回Markdown文本（包含图片占位符）
     return {
       images: extractedImages,
-      textWithPlaceholders: textResult.value,
+      textWithPlaceholders: result.value,
     };
   } catch (error: any) {
     console.error('❌ Word图片提取失败:', error);
