@@ -9,6 +9,8 @@ import { query } from '@/lib/db';
 import { parseDocument, cleanText } from '@/lib/sop/document-parser';
 import { analyzeDocument } from '@/lib/sop/ai-analyzer';
 import { detectConflicts } from '@/lib/sop/conflict-detector';
+import { extractImages } from '@/lib/sop/image-extractor';
+import { analyzeDocumentWithChunking } from '@/lib/sop/content-chunker';
 
 export async function POST(
   request: NextRequest,
@@ -42,25 +44,43 @@ export async function POST(
 
     console.log(`🔍 分析文档 ${documentId} 的冲突...`);
 
-    // 2. 解析新文档
-    const rawContent = await parseDocument(document.file_url, document.file_type);
+    // 2. 提取图片
+    console.log('🖼️ 提取文档图片...');
+    const { images, textWithPlaceholders } = await extractImages(document.file_url, document.file_type);
+    console.log(`   找到 ${images.length} 张图片`);
+
+    // 3. 解析新文档
+    let rawContent: string;
+    if (textWithPlaceholders) {
+      rawContent = textWithPlaceholders;
+      console.log('   使用带图片占位符的文本');
+    } else {
+      rawContent = await parseDocument(document.file_url, document.file_type);
+    }
     const cleanedContent = cleanText(rawContent);
 
-    // 3. AI分析文档结构
-    const parsedSOP = await analyzeDocument(cleanedContent);
+    // 4. AI分析文档结构（使用分块处理支持长文档）
+    const parsedSOP = await analyzeDocumentWithChunking(cleanedContent);
+    
+    // 将图片信息添加到SOP元数据
+    if (images.length > 0) {
+      parsedSOP.description = (parsedSOP.description || '') + 
+        `\n\n📷 本流程包含 ${images.length} 张指导图片`;
+    }
 
-    // 4. 检测冲突
+    // 5. 检测冲突
     const conflictAnalysis = await detectConflicts(parsedSOP, user.id);
 
-    // 5. 保存分析结果到文档
+    // 6. 保存分析结果到文档（包含图片信息）
     await query(
       `UPDATE sop_documents 
-       SET parsed_content = $1, updated_at = NOW() 
-       WHERE id = $2`,
+       SET parsed_content = $1, raw_content = $2, updated_at = NOW() 
+       WHERE id = $3`,
       [JSON.stringify({
         sop: parsedSOP,
+        images, // 保存图片数组
         conflicts: conflictAnalysis,
-      }), documentId]
+      }), cleanedContent, documentId]
     );
 
     return NextResponse.json({
@@ -70,6 +90,7 @@ export async function POST(
         title: document.title,
       },
       parsedSOP,
+      images, // 返回图片信息
       conflictAnalysis,
     });
   } catch (error: any) {

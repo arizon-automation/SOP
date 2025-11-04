@@ -52,6 +52,7 @@ export async function POST(
 
     const document = docResult.rows[0];
     const newSOP: ParsedSOP = document.parsed_content?.sop;
+    const newImages = document.parsed_content?.images || [];
 
     if (!newSOP) {
       return NextResponse.json(
@@ -59,6 +60,8 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    console.log(`   新文档包含 ${newImages.length} 张图片`);
 
     // 2. 获取现有SOP
     const existingSOPResult = await query(
@@ -74,6 +77,7 @@ export async function POST(
     }
 
     const existingSOP = existingSOPResult.rows[0];
+    const existingImages = existingSOP.content.images || [];
     const existingContent: ParsedSOP = {
       title: existingSOP.title,
       department: existingSOP.department,
@@ -82,6 +86,8 @@ export async function POST(
       steps: existingSOP.content.steps || [],
     };
 
+    console.log(`   现有SOP包含 ${existingImages.length} 张图片`);
+
     // 3. 合并SOP
     const mergedSOP = await mergeSOPs(newSOP, existingContent, {
       strategy: mergeStrategy || 'smart_combine',
@@ -89,13 +95,30 @@ export async function POST(
       preserveAllSteps: true,
     });
 
-    // 4. 翻译成英文
+    // 4. 合并图片（将新图片添加到现有图片列表）
+    const allImages = [...existingImages, ...newImages];
+    console.log(`   合并后共有 ${allImages.length} 张图片`);
+
+    // 更新图片描述
+    if (allImages.length > 0) {
+      mergedSOP.description = (mergedSOP.description || '').replace(/\n\n📷 本流程包含 \d+ 张指导图片/g, '');
+      mergedSOP.description = (mergedSOP.description || '') + 
+        `\n\n📷 本流程包含 ${allImages.length} 张指导图片`;
+    }
+
+    // 5. 翻译成英文
     console.log('🌏 翻译合并后的SOP...');
     const mergedSOPEn = await translateSOP(mergedSOP, 'en');
 
-    // 5. 更新数据库（使用事务）
+    // 6. 更新数据库（使用事务）
     console.log('💾 保存合并后的SOP...');
     const result = await transaction(async (client: PoolClient) => {
+      // 创建包含图片的SOP内容
+      const sopContentZh = {
+        ...mergedSOP,
+        images: allImages, // 包含所有图片
+      };
+
       // 更新中文版SOP
       const updateZhResult = await client.query(
         `UPDATE sops 
@@ -113,13 +136,19 @@ export async function POST(
           mergedSOP.description || '',
           mergedSOP.department,
           mergedSOP.category,
-          JSON.stringify(mergedSOP),
+          JSON.stringify(sopContentZh), // 保存包含图片的内容
           `${parseFloat(existingSOP.version) + 0.1}`, // 版本号递增
           targetSOPId,
         ]
       );
 
       const updatedZh = updateZhResult.rows[0];
+
+      // 创建包含图片的英文版内容
+      const sopContentEn = {
+        ...mergedSOPEn,
+        images: allImages, // 使用相同的图片
+      };
 
       // 更新英文版SOP（如果存在）
       if (existingSOP.translation_pair_id) {
@@ -138,7 +167,7 @@ export async function POST(
             mergedSOPEn.description || '',
             mergedSOPEn.department,
             mergedSOPEn.category,
-            JSON.stringify(mergedSOPEn),
+            JSON.stringify(sopContentEn), // 保存包含图片的内容
             `${parseFloat(existingSOP.version) + 0.1}`,
             existingSOP.translation_pair_id,
           ]
@@ -180,7 +209,7 @@ export async function POST(
       return { updatedZh };
     });
 
-    // 6. 更新文档状态
+    // 7. 更新文档状态
     await query(
       `UPDATE sop_documents 
        SET status = 'parsed', updated_at = NOW() 
@@ -189,12 +218,14 @@ export async function POST(
     );
 
     console.log('✅ SOP合并完成！');
+    console.log(`   最终图片数: ${allImages.length}`);
 
     return NextResponse.json({
       success: true,
       message: 'SOP合并成功',
       sop: result.updatedZh,
       mergedSteps: mergedSOP.steps.length,
+      imageCount: allImages.length,
       mergeNotes: (mergedSOP as any).mergeNotes,
     });
   } catch (error: any) {
