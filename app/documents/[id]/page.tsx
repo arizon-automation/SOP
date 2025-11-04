@@ -27,6 +27,9 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
   const [document, setDocument] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [parsing, setParsing] = useState(false);
+  const [parseSuccess, setParseSuccess] = useState(false);
+  const [parseError, setParseError] = useState('');
 
   useEffect(() => {
     loadDocument();
@@ -77,6 +80,43 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
       console.error('删除文档失败:', error);
       alert('删除失败，请重试');
       setDeleting(false);
+    }
+  };
+
+  const handleParse = async () => {
+    if (!confirm('开始AI解析吗？这可能需要30-60秒。')) {
+      return;
+    }
+
+    setParsing(true);
+    setParseError('');
+    setParseSuccess(false);
+
+    try {
+      const res = await fetch(`/api/documents/${params.id}/parse`, {
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'AI解析失败');
+      }
+
+      const data = await res.json();
+      setParseSuccess(true);
+
+      // 刷新文档状态
+      await loadDocument();
+
+      // 3秒后跳转到SOP列表
+      setTimeout(() => {
+        router.push(`/sops/${data.sop.zh.id}`);
+      }, 2000);
+    } catch (error: any) {
+      console.error('AI解析失败:', error);
+      setParseError(error.message);
+    } finally {
+      setParsing(false);
     }
   };
 
@@ -163,6 +203,29 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Success Message */}
+        {parseSuccess && (
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
+            <svg className="w-6 h-6 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="text-green-800 font-semibold">AI解析成功！SOP已生成</p>
+              <p className="text-green-600 text-sm">正在跳转到SOP详情页...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {parseError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+            <svg className="w-6 h-6 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-red-800">{parseError}</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Document Info */}
           <div className="lg:col-span-2 space-y-6">
@@ -273,13 +336,39 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
                 </a>
 
                 <button
-                  disabled
-                  className="w-full px-4 py-3 bg-gray-100 text-gray-400 rounded-lg font-medium cursor-not-allowed flex items-center justify-center gap-2"
+                  onClick={handleParse}
+                  disabled={parsing || document.status === 'parsing' || document.status === 'parsed'}
+                  className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
+                    document.status === 'parsed'
+                      ? 'bg-green-100 text-green-600 cursor-not-allowed'
+                      : parsing || document.status === 'parsing'
+                      ? 'bg-yellow-100 text-yellow-600 cursor-wait'
+                      : 'bg-primary-500 hover:bg-primary-600 text-white'
+                  }`}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  AI解析（开发中）
+                  {parsing || document.status === 'parsing' ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      AI解析中...
+                    </>
+                  ) : document.status === 'parsed' ? (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      已解析
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      🤖 AI解析
+                    </>
+                  )}
                 </button>
 
                 <hr className="my-4" />

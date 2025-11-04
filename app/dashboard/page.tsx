@@ -124,8 +124,13 @@ export default function DashboardPage() {
           {/* SOP管理 */}
           <Link
             href="/sops"
-            className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200"
+            className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 relative overflow-hidden"
           >
+            <div className="absolute top-2 right-2">
+              <span className="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded-full">
+                NEW
+              </span>
+            </div>
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-2xl">
                 📋
@@ -133,7 +138,7 @@ export default function DashboardPage() {
               <h3 className="text-lg font-bold text-gray-900">SOP管理</h3>
             </div>
             <p className="text-gray-600 text-sm mb-3">
-              查看、编辑和管理所有标准操作流程（中英文双语）
+              查看AI生成的标准操作流程（中英文双语）
             </p>
             <div className="text-primary-500 text-sm font-medium">
               查看SOP →
