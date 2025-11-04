@@ -86,7 +86,13 @@ export async function DELETE(
       );
     }
 
-    // 删除文档（级联删除相关SOP）
+    // 先删除关联的SOP（因为数据库设置的是ON DELETE SET NULL，不是CASCADE）
+    await query(
+      `DELETE FROM sops WHERE document_id = $1`,
+      [documentId]
+    );
+
+    // 再删除文档本身
     await query(
       `DELETE FROM sop_documents WHERE id = $1`,
       [documentId]
@@ -94,7 +100,7 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: '文档删除成功',
+      message: '文档及其关联的SOP删除成功',
     });
   } catch (error: any) {
     console.error('删除文档错误:', error);

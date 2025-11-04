@@ -44,6 +44,7 @@ export default function SOPDetailPage({ params }: { params: { id: string } }) {
   const [sop, setSOP] = useState<SOP | null>(null);
   const [translationPair, setTranslationPair] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadSOP();
@@ -71,6 +72,32 @@ export default function SOPDetailPage({ params }: { params: { id: string } }) {
       console.error('加载SOP详情失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('确定要删除这个SOP吗？此操作无法撤销。\n\n注意：如果有对应的翻译版本，翻译版本不会被删除，但关联会被清除。')) {
+      return;
+    }
+
+    setDeleting(true);
+
+    try {
+      const res = await fetch(`/api/sops/${params.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '删除失败');
+      }
+
+      // 成功后跳转到SOP列表
+      router.push('/sops');
+    } catch (error: any) {
+      console.error('删除SOP失败:', error);
+      alert(`删除失败：${error.message}`);
+      setDeleting(false);
     }
   };
 
@@ -300,6 +327,19 @@ export default function SOPDetailPage({ params }: { params: { id: string } }) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                   </svg>
                   导出PDF（开发中）
+                </button>
+
+                <hr className="my-4" />
+
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="w-full px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  {deleting ? '删除中...' : '删除SOP'}
                 </button>
               </div>
             </div>

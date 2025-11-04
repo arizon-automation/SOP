@@ -24,6 +24,7 @@ export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     loadDocuments();
@@ -92,6 +93,36 @@ export default function DocumentsPage() {
     if (fileType === 'pdf') return '📕';
     if (fileType === 'docx') return '📘';
     return '📄';
+  };
+
+  const handleDelete = async (docId: number, docTitle: string, e: React.MouseEvent) => {
+    e.preventDefault(); // 阻止Link跳转
+    e.stopPropagation();
+
+    if (!confirm(`确定要删除文档 "${docTitle}" 吗？\n\n注意：删除文档会同时删除所有关联的SOP！\n\n此操作无法撤销。`)) {
+      return;
+    }
+
+    setDeletingId(docId);
+
+    try {
+      const res = await fetch(`/api/documents/${docId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '删除失败');
+      }
+
+      // 成功后重新加载列表
+      await loadDocuments();
+    } catch (error: any) {
+      console.error('删除文档失败:', error);
+      alert(`删除失败：${error.message}`);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   if (loading) {
@@ -190,17 +221,35 @@ export default function DocumentsPage() {
             {documents.map((doc) => (
               <div
                 key={doc.id}
-                className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-6 border border-gray-200"
+                className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-6 border border-gray-200 relative"
               >
                 <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="text-4xl">{getFileIcon(doc.file_type)}</div>
+                  <div className="flex items-center gap-3 flex-1 min-w-0 pr-8">
+                    <div className="text-4xl flex-shrink-0">{getFileIcon(doc.file_type)}</div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-gray-900 truncate">{doc.title}</h3>
                       <p className="text-xs text-gray-500">{formatFileSize(doc.file_size)}</p>
                     </div>
                   </div>
                   {getStatusBadge(doc.status)}
+                  {/* 删除按钮 */}
+                  <button
+                    onClick={(e) => handleDelete(doc.id, doc.title, e)}
+                    disabled={deletingId === doc.id}
+                    className="absolute top-4 right-4 p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                    title="删除文档"
+                  >
+                    {deletingId === doc.id ? (
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    )}
+                  </button>
                 </div>
 
                 <div className="space-y-2 text-sm text-gray-600 mb-4">
