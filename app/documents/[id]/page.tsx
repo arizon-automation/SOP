@@ -410,37 +410,37 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
                 </a>
 
                 <button
-                  onClick={handleParse}
-                  disabled={parsing || document.status === 'parsing' || document.status === 'parsed'}
+                  onClick={handleAnalyzeConflicts}
+                  disabled={analyzing || document.status === 'parsing' || document.status === 'parsed'}
                   className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
                     document.status === 'parsed'
                       ? 'bg-green-100 text-green-600 cursor-not-allowed'
-                      : parsing || document.status === 'parsing'
+                      : analyzing
                       ? 'bg-yellow-100 text-yellow-600 cursor-wait'
                       : 'bg-primary-500 hover:bg-primary-600 text-white'
                   }`}
                 >
-                  {parsing || document.status === 'parsing' ? (
+                  {analyzing ? (
                     <>
                       <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      AI解析中...
+                      智能分析中...
                     </>
                   ) : document.status === 'parsed' ? (
                     <>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      已解析
+                      已处理
                     </>
                   ) : (
                     <>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                       </svg>
-                      🤖 AI解析
+                      🤖 智能分析 & 生成SOP
                     </>
                   )}
                 </button>
@@ -468,6 +468,136 @@ export default function DocumentDetailPage({ params }: { params: { id: string } 
           </div>
         </div>
       </main>
+
+      {/* 合并对话框 */}
+      {showMergeDialog && conflicts && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                🔍 冲突分析结果
+              </h2>
+              <p className="text-gray-600">发现与现有SOP的重复或冲突信息</p>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* 分析摘要 */}
+              <div className={`p-4 rounded-lg border-2 ${
+                conflicts.hasConflicts 
+                  ? 'bg-red-50 border-red-200' 
+                  : conflicts.hasDuplicates
+                  ? 'bg-yellow-50 border-yellow-200'
+                  : 'bg-blue-50 border-blue-200'
+              }`}>
+                <div className="flex items-start gap-3">
+                  <svg className="w-6 h-6 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 mb-2">分析总结</h3>
+                    <p className="text-sm text-gray-700 mb-2">
+                      {conflicts.hasConflicts && '⚠️ 发现与现有SOP存在冲突的信息'}
+                      {conflicts.hasDuplicates && !conflicts.hasConflicts && '📋 发现与现有SOP高度重复的内容'}
+                      {!conflicts.hasConflicts && !conflicts.hasDuplicates && 'ℹ️ 发现相关但可共存的SOP'}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      找到 {conflicts.relatedSOPs.length} 个相关的现有SOP
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 相关SOP列表 */}
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-3">相关SOP列表</h3>
+                <div className="space-y-3">
+                  {conflicts.relatedSOPs.map((relatedSOP, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900">{relatedSOP.title}</h4>
+                          <p className="text-sm text-gray-600">
+                            {relatedSOP.department} · {relatedSOP.category}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                            relatedSOP.conflictType === 'duplicate' 
+                              ? 'bg-red-100 text-red-800'
+                              : relatedSOP.conflictType === 'conflicting'
+                              ? 'bg-orange-100 text-orange-800'
+                              : relatedSOP.conflictType === 'partial_overlap'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-green-100 text-green-800'
+                          }`}>
+                            {relatedSOP.conflictType === 'duplicate' && '重复'}
+                            {relatedSOP.conflictType === 'conflicting' && '冲突'}
+                            {relatedSOP.conflictType === 'partial_overlap' && '部分重叠'}
+                            {relatedSOP.conflictType === 'complementary' && '互补'}
+                          </span>
+                          <span className="text-sm font-semibold text-gray-700">
+                            {Math.round(relatedSOP.similarity * 100)}% 相似
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-700">{relatedSOP.conflictDetails}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 建议操作 */}
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-3">建议操作</h3>
+                <div className="space-y-3">
+                  {conflicts.suggestions.map((suggestion, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4 hover:border-primary-500 transition-colors">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900 mb-1">
+                            {suggestion.action === 'merge' && '🔀 合并SOP'}
+                            {suggestion.action === 'replace' && '♻️ 替换SOP'}
+                            {suggestion.action === 'update_existing' && '📝 更新现有SOP'}
+                            {suggestion.action === 'keep_both' && '📚 保留两个版本'}
+                          </h4>
+                          <p className="text-sm text-gray-700 mb-2">{suggestion.reason}</p>
+                          <p className="text-xs text-gray-600">{suggestion.details}</p>
+                        </div>
+                        {suggestion.targetSOPId && (
+                          <button
+                            onClick={() => handleMerge(suggestion.targetSOPId!, suggestion.action)}
+                            disabled={merging}
+                            className="ml-4 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                          >
+                            {merging ? '处理中...' : '执行'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 底部操作 */}
+            <div className="p-6 border-t border-gray-200 flex justify-between gap-3">
+              <button
+                onClick={() => setShowMergeDialog(false)}
+                className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateNewSOP}
+                disabled={parsing}
+                className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {parsing ? '创建中...' : '忽略冲突，创建新SOP'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
