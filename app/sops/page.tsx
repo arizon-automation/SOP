@@ -7,6 +7,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslation, useLanguage } from '@/contexts/LanguageContext';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 interface SOP {
   id: number;
@@ -24,20 +26,22 @@ interface SOP {
 
 export default function SOPsPage() {
   const router = useRouter();
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const [sops, setSOPs] = useState<SOP[]>([]);
   const [loading, setLoading] = useState(true);
-  const [languageFilter, setLanguageFilter] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     loadSOPs();
-  }, [languageFilter, departmentFilter]);
+  }, [language, departmentFilter]);
 
   const loadSOPs = async () => {
     try {
       const params = new URLSearchParams();
-      if (languageFilter) params.set('language', languageFilter);
+      // 根据全局语言设置自动过滤
+      params.set('language', language);
       if (departmentFilter) params.set('department', departmentFilter);
 
       const res = await fetch(`/api/sops?${params}`);
@@ -114,7 +118,7 @@ export default function SOPsPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">加载中...</p>
+          <p className="text-gray-600">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -129,16 +133,21 @@ export default function SOPsPage() {
             <div className="flex items-center gap-3">
               <span className="text-3xl">📋</span>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">SOP管理</h1>
-                <p className="text-sm text-gray-600">标准操作流程 · 中英文双语</p>
+                <h1 className="text-2xl font-bold text-gray-900">{t('sops.title')}</h1>
+                <p className="text-sm text-gray-600">
+                  {language === 'zh' ? '显示中文版SOP' : 'Showing English SOPs'}
+                </p>
               </div>
             </div>
-            <Link
-              href="/dashboard"
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
-            >
-              ← 返回
-            </Link>
+            <div className="flex items-center gap-4">
+              <LanguageSwitcher />
+              <Link
+                href="/dashboard"
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
+              >
+                ← {t('common.back')}
+              </Link>
+            </div>
           </div>
         </div>
       </header>
@@ -147,32 +156,38 @@ export default function SOPsPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Filters */}
         <div className="mb-6 flex gap-3">
-          <select
-            value={languageFilter}
-            onChange={(e) => setLanguageFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-          >
-            <option value="">所有语言</option>
-            <option value="zh">中文</option>
-            <option value="en">English</option>
-          </select>
-
           <input
             type="text"
-            placeholder="按部门筛选..."
+            placeholder={language === 'zh' ? '按部门筛选...' : 'Filter by department...'}
             value={departmentFilter}
             onChange={(e) => setDepartmentFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 w-64"
           />
+          
+          <div className="flex-1 text-sm text-gray-600 flex items-center">
+            {language === 'zh' ? (
+              <>
+                💡 切换到<span className="mx-1 px-2 py-0.5 bg-green-100 text-green-800 rounded font-semibold">English</span>查看英文版SOP
+              </>
+            ) : (
+              <>
+                💡 Switch to <span className="mx-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-semibold">中文</span> to view Chinese SOPs
+              </>
+            )}
+          </div>
         </div>
 
         {/* SOP List */}
         {sops.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <div className="text-6xl mb-4">📭</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">还没有SOP</h3>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              {language === 'zh' ? '还没有中文SOP' : 'No English SOPs yet'}
+            </h3>
             <p className="text-gray-600 mb-6">
-              上传文档并使用AI解析功能来创建SOP
+              {language === 'zh' 
+                ? '上传文档并使用AI解析功能来创建SOP' 
+                : 'Upload documents and use AI parsing to create SOPs'}
             </p>
             <Link
               href="/documents/upload"
@@ -181,7 +196,7 @@ export default function SOPsPage() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              上传文档
+              {language === 'zh' ? '上传文档' : 'Upload Document'}
             </Link>
           </div>
         ) : (
@@ -196,7 +211,6 @@ export default function SOPsPage() {
                     <div className="flex-1 pr-12">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="text-xl font-bold text-gray-900">{sop.title}</h3>
-                        {getLanguageBadge(sop.language)}
                       </div>
                       {sop.description && (
                         <p className="text-gray-600 text-sm mb-3 line-clamp-2">{sop.description}</p>
