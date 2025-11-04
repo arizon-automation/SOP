@@ -49,16 +49,24 @@ export async function parsePDF(fileUrl: string): Promise<string> {
 }
 
 /**
- * 解析Word文档
+ * 解析Word文档（带图片占位符）
  */
-export async function parseWord(fileUrl: string): Promise<string> {
+export async function parseWord(fileUrl: string, imageCount: number = 0): Promise<string> {
   try {
     console.log('📘 开始解析Word:', fileUrl);
     
     const buffer = await downloadFile(fileUrl);
     const result = await mammoth.extractRawText({ buffer });
     
-    const text = result.value;
+    let text = result.value;
+    
+    // 如果有图片，在文本中添加图片占位符
+    if (imageCount > 0) {
+      console.log(`📷 文档包含 ${imageCount} 张图片，添加占位符`);
+      // 在文本开头添加图片说明
+      text = `[本文档包含 ${imageCount} 张指导图片，已保存]\n\n` + text;
+    }
+    
     console.log(`✅ Word解析成功: ${text.length} 字符`);
     
     // 检查是否有警告

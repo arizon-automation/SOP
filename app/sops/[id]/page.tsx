@@ -33,6 +33,12 @@ interface Step {
   notes?: string[];
 }
 
+interface SOPImage {
+  filename: string;
+  url: string;
+  contentType: string;
+}
+
 export default function SOPDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [sop, setSOP] = useState<SOP | null>(null);
@@ -84,6 +90,7 @@ export default function SOPDetailPage({ params }: { params: { id: string } }) {
   }
 
   const steps: Step[] = sop.content.steps || [];
+  const images: SOPImage[] = sop.content.images || [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -120,11 +127,38 @@ export default function SOPDetailPage({ params }: { params: { id: string } }) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - SOP Content */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Images Gallery */}
+            {images.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  指导图片 ({images.length} 张)
+                </h2>
+                <div className="grid grid-cols-2 gap-4">
+                  {images.map((img, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                      <img 
+                        src={img.url} 
+                        alt={`指导图片 ${index + 1}`}
+                        className="w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => window.open(img.url, '_blank')}
+                      />
+                      <div className="p-2 bg-gray-50 text-xs text-gray-600 text-center">
+                        图片 {index + 1} - 点击查看大图
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Description */}
             {sop.description && (
               <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
                 <h2 className="text-lg font-bold text-gray-900 mb-3">流程说明</h2>
-                <p className="text-gray-700">{sop.description}</p>
+                <p className="text-gray-700 whitespace-pre-line">{sop.description}</p>
               </div>
             )}
 

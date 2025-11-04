@@ -5,6 +5,7 @@
 
 import { parseDocument, cleanText } from './document-parser';
 import { analyzeDocument, translateSOP, type ParsedSOP } from './ai-analyzer';
+import { extractImages, type ExtractedImage } from './image-extractor';
 import { query, transaction } from '@/lib/db';
 import type { PoolClient } from 'pg';
 
@@ -13,6 +14,7 @@ export interface GenerateSOPResult {
   sopEn: any; // 英文版SOP
   rawContent: string;
   parsedContent: ParsedSOP;
+  images: ExtractedImage[];
 }
 
 /**
@@ -43,8 +45,12 @@ export async function generateSOPFromDocument(
       [documentId]
     );
 
-    // 2. 解析文档内容
-    console.log('📄 Step 1: 解析文档...');
+    // 2. 提取图片
+    console.log('🖼️ Step 1: 提取文档图片...');
+    const images = await extractImages(document.file_url, document.file_type);
+    
+    // 3. 解析文档内容
+    console.log('📄 Step 2: 解析文档内容...');
     const rawContent = await parseDocument(document.file_url, document.file_type);
     const cleanedContent = cleanText(rawContent);
 
@@ -54,24 +60,35 @@ export async function generateSOPFromDocument(
       [cleanedContent, documentId]
     );
 
-    // 3. AI分析文档结构
-    console.log('🤖 Step 2: AI分析...');
+    // 4. AI分析文档结构
+    console.log('🤖 Step 3: AI分析...');
     const parsedSOP = await analyzeDocument(cleanedContent);
+    
+    // 将图片信息添加到SOP元数据
+    if (images.length > 0) {
+      parsedSOP.description = (parsedSOP.description || '') + 
+        `\n\n📷 本流程包含 ${images.length} 张指导图片`;
+    }
 
-    // 保存解析结果到数据库
+    // 保存解析结果和图片信息到数据库
     await query(
       `UPDATE sop_documents SET parsed_content = $1 WHERE id = $2`,
-      [JSON.stringify(parsedSOP), documentId]
+      [JSON.stringify({ ...parsedSOP, images }), documentId]
     );
 
-    // 4. 翻译成英文
-    console.log('🌏 Step 3: 翻译成英文...');
+    // 5. 翻译成英文
+    console.log('🌏 Step 4: 翻译成英文...');
     const sopEn = await translateSOP(parsedSOP, 'en');
 
-    // 5. 在事务中创建中英文双语SOP
-    console.log('💾 Step 4: 保存SOP到数据库...');
+    // 6. 在事务中创建中英文双语SOP
+    console.log('💾 Step 5: 保存SOP到数据库...');
     const result = await transaction(async (client: PoolClient) => {
-      // 创建中文版SOP
+      // 创建中文版SOP（包含图片信息）
+      const sopContentZh = {
+        ...parsedSOP,
+        images, // 添加图片数组
+      };
+      
       const sopZhResult = await client.query(
         `INSERT INTO sops 
          (document_id, title, description, department, category, version, language, content, status, created_by)
@@ -85,7 +102,7 @@ export async function generateSOPFromDocument(
           parsedSOP.category,
           '1.0',
           'zh',
-          JSON.stringify(parsedSOP),
+          JSON.stringify(sopContentZh),
           'approved', // 自动批准
           userId,
         ]
@@ -93,7 +110,12 @@ export async function generateSOPFromDocument(
 
       const sopZh = sopZhResult.rows[0];
 
-      // 创建英文版SOP
+      // 创建英文版SOP（包含图片信息）
+      const sopContentEn = {
+        ...sopEn,
+        images, // 使用相同的图片
+      };
+      
       const sopEnResult = await client.query(
         `INSERT INTO sops 
          (document_id, title, description, department, category, version, language, content, status, created_by, translation_pair_id)
@@ -107,7 +129,7 @@ export async function generateSOPFromDocument(
           sopEn.category,
           '1.0',
           'en',
-          JSON.stringify(sopEn),
+          JSON.stringify(sopContentEn),
           'approved',
           userId,
           sopZh.id, // 关联到中文版
@@ -151,7 +173,7 @@ export async function generateSOPFromDocument(
       return { sopZh, sopEn: sopEnRow };
     });
 
-    // 6. 更新文档状态为"已解析"
+    // 7. 更新文档状态为"已解析"
     await query(
       `UPDATE sop_documents SET status = 'parsed', updated_at = NOW() WHERE id = $1`,
       [documentId]
@@ -160,12 +182,14 @@ export async function generateSOPFromDocument(
     console.log('✅ SOP生成完成！');
     console.log(`   中文版ID: ${result.sopZh.id}`);
     console.log(`   英文版ID: ${result.sopEn.id}`);
+    console.log(`   图片数量: ${images.length}`);
 
     return {
       sopZh: result.sopZh,
       sopEn: result.sopEn,
       rawContent: cleanedContent,
       parsedContent: parsedSOP,
+      images,
     };
   } catch (error: any) {
     console.error('❌ SOP生成失败:', error);
