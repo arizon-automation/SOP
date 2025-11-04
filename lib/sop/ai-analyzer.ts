@@ -16,6 +16,7 @@ export interface SOPStep {
   responsible?: string;
   conditions?: string[];
   notes?: string[];
+  imageIndices?: number[];  // 该步骤相关的图片索引数组
 }
 
 export interface ParsedSOP {
@@ -72,10 +73,17 @@ export async function analyzeDocument(content: string): Promise<ParsedSOP> {
       "description": "详细描述（必须包含原文档中这个步骤的所有细节、所有句子、所有说明）",
       "responsible": "负责人或角色",
       "conditions": ["触发条件1（完整原文）", "触发条件2（完整原文）"],
-      "notes": ["注意事项1（完整原文）", "注意事项2（完整原文）"]
+      "notes": ["注意事项1（完整原文）", "注意事项2（完整原文）"],
+      "imageIndices": [0, 1]  // 该步骤相关的图片索引（如果文档中有[图片0]、[图片1]等占位符出现在这个步骤的内容中）
     }
   ]
 }
+
+🖼️ 图片处理说明：
+- 如果文档内容中出现 [图片0]、[图片1]、[图片2] 等占位符
+- 请识别这些占位符出现在哪个步骤的内容范围内
+- 将对应的图片索引（数字部分）添加到该步骤的 imageIndices 数组中
+- 不要在 description 中保留 [图片X] 占位符，用自然语言描述即可（如："见下图"、"如图所示"）
 
 特别注意：
 - description字段要详尽，包含原文档中该步骤的**所有段落、所有细节、所有说明**

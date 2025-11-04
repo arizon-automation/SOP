@@ -31,9 +31,11 @@ interface Step {
   responsible?: string;
   conditions?: string[];
   notes?: string[];
+  imageIndices?: number[];
 }
 
 interface SOPImage {
+  index: number;
   filename: string;
   url: string;
   contentType: string;
@@ -154,29 +156,16 @@ export default function SOPDetailPage({ params }: { params: { id: string } }) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - SOP Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Images Gallery */}
+            {/* 图片说明 - 只在有图片时显示提示 */}
             {images.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-blue-900">
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  指导图片 ({images.length} 张)
-                </h2>
-                <div className="grid grid-cols-2 gap-4">
-                  {images.map((img, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
-                      <img 
-                        src={img.url} 
-                        alt={`指导图片 ${index + 1}`}
-                        className="w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => window.open(img.url, '_blank')}
-                      />
-                      <div className="p-2 bg-gray-50 text-xs text-gray-600 text-center">
-                        图片 {index + 1} - 点击查看大图
-                      </div>
-                    </div>
-                  ))}
+                  <p className="text-sm font-semibold">
+                    📷 本流程包含 {images.length} 张指导图片，已在相关步骤中展示
+                  </p>
                 </div>
               </div>
             )}
@@ -193,46 +182,74 @@ export default function SOPDetailPage({ params }: { params: { id: string } }) {
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
               <h2 className="text-lg font-bold text-gray-900 mb-4">操作步骤</h2>
               <div className="space-y-6">
-                {steps.map((step, index) => (
-                  <div key={index} className="border-l-4 border-primary-500 pl-4">
-                    <div className="flex items-start gap-3 mb-2">
-                      <div className="w-8 h-8 bg-primary-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
-                        {step.order}
+                {steps.map((step, index) => {
+                  // 获取该步骤相关的图片
+                  const stepImages = step.imageIndices 
+                    ? images.filter(img => step.imageIndices!.includes(img.index))
+                    : [];
+
+                  return (
+                    <div key={index} className="border-l-4 border-primary-500 pl-4">
+                      <div className="flex items-start gap-3 mb-2">
+                        <div className="w-8 h-8 bg-primary-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                          {step.order}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-gray-900">{step.title}</h3>
+                          {step.responsible && (
+                            <p className="text-sm text-primary-600 mt-1">
+                              👤 负责人: {step.responsible}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900">{step.title}</h3>
-                        {step.responsible && (
-                          <p className="text-sm text-primary-600 mt-1">
-                            👤 负责人: {step.responsible}
-                          </p>
-                        )}
-                      </div>
+                      <p className="text-gray-700 ml-11 mb-3 whitespace-pre-line">{step.description}</p>
+
+                      {/* 步骤相关的图片 */}
+                      {stepImages.length > 0 && (
+                        <div className="ml-11 mb-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {stepImages.map((img) => (
+                              <div key={img.index} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                                <img 
+                                  src={img.url} 
+                                  alt={`步骤${step.order}图片${img.index + 1}`}
+                                  className="w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                                  onClick={() => window.open(img.url, '_blank')}
+                                />
+                                <div className="p-2 bg-gray-50 text-xs text-gray-600 text-center">
+                                  🖼️ 图片 {img.index + 1} - 点击查看大图
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {step.conditions && step.conditions.length > 0 && (
+                        <div className="ml-11 mb-2">
+                          <p className="text-sm font-semibold text-gray-700 mb-1">触发条件:</p>
+                          <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                            {step.conditions.map((condition, i) => (
+                              <li key={i}>{condition}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {step.notes && step.notes.length > 0 && (
+                        <div className="ml-11 bg-yellow-50 border border-yellow-200 rounded p-3">
+                          <p className="text-sm font-semibold text-yellow-900 mb-1">⚠️ 注意事项:</p>
+                          <ul className="list-disc list-inside text-sm text-yellow-800 space-y-1">
+                            {step.notes.map((note, i) => (
+                              <li key={i}>{note}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-gray-700 ml-11 mb-3">{step.description}</p>
-
-                    {step.conditions && step.conditions.length > 0 && (
-                      <div className="ml-11 mb-2">
-                        <p className="text-sm font-semibold text-gray-700 mb-1">触发条件:</p>
-                        <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                          {step.conditions.map((condition, i) => (
-                            <li key={i}>{condition}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {step.notes && step.notes.length > 0 && (
-                      <div className="ml-11 bg-yellow-50 border border-yellow-200 rounded p-3">
-                        <p className="text-sm font-semibold text-yellow-900 mb-1">⚠️ 注意事项:</p>
-                        <ul className="list-disc list-inside text-sm text-yellow-800 space-y-1">
-                          {step.notes.map((note, i) => (
-                            <li key={i}>{note}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

@@ -27,22 +27,27 @@ async function downloadFile(fileUrl: string): Promise<Buffer> {
 }
 
 export interface ExtractedImage {
+  index: number;           // 图片在文档中的顺序索引（从0开始）
   filename: string;
   url: string;
   contentType: string;
 }
 
 /**
- * 从Word文档提取图片
+ * 从Word文档提取图片（并插入占位符）
  */
-export async function extractImagesFromWord(fileUrl: string): Promise<ExtractedImage[]> {
+export async function extractImagesFromWord(fileUrl: string): Promise<{
+  images: ExtractedImage[];
+  textWithPlaceholders: string;
+}> {
   console.log('🖼️ 开始提取Word文档中的图片...');
   
   try {
     const buffer = await downloadFile(fileUrl);
     const extractedImages: ExtractedImage[] = [];
+    let imageIndex = 0;
     
-    // 使用mammoth提取图片
+    // 使用mammoth提取图片并转换为HTML（包含占位符）
     const result = await mammoth.convertToHtml(
       { buffer },
       {
@@ -62,16 +67,20 @@ export async function extractImagesFromWord(fileUrl: string): Promise<ExtractedI
             // 上传图片
             const { url } = await uploadFile(file, filename);
             
+            const currentIndex = imageIndex;
             extractedImages.push({
+              index: currentIndex,
               filename,
               url,
               contentType,
             });
             
-            console.log(`✅ 图片已提取: ${filename}`);
+            console.log(`✅ 图片 ${currentIndex} 已提取: ${filename}`);
             
-            // 返回img标签（用于HTML转换，我们不会用到）
-            return { src: url };
+            imageIndex++;
+            
+            // 返回包含占位符的img标签
+            return { src: `[图片${currentIndex}]` };
           } catch (error) {
             console.error('图片提取失败:', error);
             return { src: '' };
@@ -80,11 +89,20 @@ export async function extractImagesFromWord(fileUrl: string): Promise<ExtractedI
       }
     );
     
+    // 提取纯文本（包含图片占位符）
+    const textResult = await mammoth.extractRawText({ buffer });
+    
     console.log(`✅ Word文档图片提取完成: ${extractedImages.length} 张`);
-    return extractedImages;
+    return {
+      images: extractedImages,
+      textWithPlaceholders: textResult.value,
+    };
   } catch (error: any) {
     console.error('❌ Word图片提取失败:', error);
-    return [];
+    return {
+      images: [],
+      textWithPlaceholders: '',
+    };
   }
 }
 
@@ -116,15 +134,19 @@ export async function extractImagesFromPDF(fileUrl: string): Promise<ExtractedIm
 /**
  * 根据文件类型自动提取图片
  */
-export async function extractImages(fileUrl: string, fileType: string): Promise<ExtractedImage[]> {
+export async function extractImages(fileUrl: string, fileType: string): Promise<{
+  images: ExtractedImage[];
+  textWithPlaceholders?: string;
+}> {
   console.log(`🔍 检查文档中的图片: ${fileType}`);
   
   if (fileType === 'docx') {
     return await extractImagesFromWord(fileUrl);
   } else if (fileType === 'pdf') {
-    return await extractImagesFromPDF(fileUrl);
+    const images = await extractImagesFromPDF(fileUrl);
+    return { images, textWithPlaceholders: undefined };
   } else {
-    return [];
+    return { images: [], textWithPlaceholders: undefined };
   }
 }
 

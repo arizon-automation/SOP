@@ -46,13 +46,22 @@ export async function generateSOPFromDocument(
       [documentId]
     );
 
-    // 2. 提取图片
+    // 2. 提取图片（并获取带占位符的文本）
     console.log('🖼️ Step 1: 提取文档图片...');
-    const images = await extractImages(document.file_url, document.file_type);
+    const { images, textWithPlaceholders } = await extractImages(document.file_url, document.file_type);
     
     // 3. 解析文档内容
     console.log('📄 Step 2: 解析文档内容...');
-    const rawContent = await parseDocument(document.file_url, document.file_type);
+    let rawContent: string;
+    
+    // 如果有带占位符的文本（Word文档），使用它；否则正常解析
+    if (textWithPlaceholders) {
+      rawContent = textWithPlaceholders;
+      console.log('   使用带图片占位符的文本');
+    } else {
+      rawContent = await parseDocument(document.file_url, document.file_type);
+    }
+    
     const cleanedContent = cleanText(rawContent);
 
     // 保存原始内容到数据库
