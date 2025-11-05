@@ -107,9 +107,9 @@ export async function POST(request: NextRequest) {
       // 记录到问答历史
       await query(
         `INSERT INTO sop_qa_history 
-         (user_id, question, answer, language, found_results)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [user.id, question, noResultAnswer, language, false]
+         (user_id, username, user_language, question, answer, matched_sop_ids)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [user.id, user.username, language, question, noResultAnswer, []]
       );
 
       return NextResponse.json({
@@ -213,15 +213,16 @@ ${context}
     // 6. 记录到问答历史
     await query(
       `INSERT INTO sop_qa_history 
-       (user_id, question, answer, language, found_results, related_sop_ids)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+       (user_id, username, user_language, question, answer, matched_sop_ids, confidence_score)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         user.id,
+        user.username,
+        language,
         question,
         answer,
-        language,
-        true,
-        JSON.stringify(relatedSOPs.map(sop => sop.id)),
+        relatedSOPs.map(sop => sop.id),
+        0.85, // 临时固定置信度
       ]
     );
 
