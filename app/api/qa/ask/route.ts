@@ -27,15 +27,13 @@ export async function POST(request: NextRequest) {
 
     console.log(`💬 用户问题 (${language}): ${question}`);
 
-    // 1. 获取问题的向量嵌入
-    const embeddingResponse = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: question,
-    });
+    // TODO: 未来可以使用向量嵌入进行更精确的语义搜索
+    // const embeddingResponse = await openai.embeddings.create({
+    //   model: 'text-embedding-ada-002',
+    //   input: question,
+    // });
 
-    const questionEmbedding = embeddingResponse.data[0].embedding;
-
-    // 2. 从数据库中搜索相关的SOP
+    // 1. 从数据库中搜索相关的SOP（使用文本搜索）
     // 首先尝试从content_blocks搜索，如果没有则直接从SOPs表搜索
     let searchResult = await query(
       `SELECT 
