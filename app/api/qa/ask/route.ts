@@ -35,10 +35,9 @@ export async function POST(request: NextRequest) {
 
     const questionEmbedding = embeddingResponse.data[0].embedding;
 
-    // 2. 从数据库中搜索相关的SOP内容块
-    // 注意：这需要pgvector扩展已经安装
-    // 暂时使用简单的文本搜索作为fallback
-    const searchResult = await query(
+    // 2. 从数据库中搜索相关的SOP
+    // 首先尝试从content_blocks搜索，如果没有则直接从SOPs表搜索
+    let searchResult = await query(
       `SELECT 
         cb.sop_id,
         cb.content,
@@ -67,7 +66,39 @@ export async function POST(request: NextRequest) {
       [language, `%${question}%`]
     );
 
-    console.log(`   找到 ${searchResult.rows.length} 个相关内容块`);
+    console.log(`   找到 ${searchResult.rows.length} 个内容块`);
+
+    // 如果没有找到content blocks，直接从SOPs表搜索
+    if (searchResult.rows.length === 0) {
+      console.log('   尝试直接从SOPs表搜索...');
+      searchResult = await query(
+        `SELECT 
+          s.id as sop_id,
+          s.title,
+          s.description,
+          s.department,
+          s.category,
+          s.language,
+          s.content as sop_content
+         FROM sops s
+         WHERE 
+          s.language = $1
+          AND (
+            s.title ILIKE $2
+            OR s.description ILIKE $2
+            OR s.content::text ILIKE $2
+          )
+         ORDER BY 
+          CASE 
+            WHEN s.title ILIKE $2 THEN 1
+            WHEN s.description ILIKE $2 THEN 2
+            ELSE 3
+          END
+         LIMIT 5`,
+        [language, `%${question}%`]
+      );
+      console.log(`   从SOPs表找到 ${searchResult.rows.length} 个相关SOP`);
+    }
 
     // 3. 如果没有找到相关内容，返回通用回复
     if (searchResult.rows.length === 0) {
@@ -106,7 +137,26 @@ export async function POST(request: NextRequest) {
       }
 
       // 添加到上下文
-      contextChunks.push(`【${row.title} - ${row.department}】\n${row.content}\n`);
+      if (row.content) {
+        // 来自content_blocks
+        contextChunks.push(`【${row.title} - ${row.department}】\n${row.content}\n`);
+      } else if (row.sop_content) {
+        // 来自sops表，提取步骤信息
+        try {
+          const sopData = typeof row.sop_content === 'string' 
+            ? JSON.parse(row.sop_content) 
+            : row.sop_content;
+          
+          const stepsText = sopData.steps?.map((step: any, index: number) => 
+            `步骤${index + 1}: ${step.title}\n${step.description}`
+          ).join('\n\n') || '';
+          
+          contextChunks.push(`【${row.title} - ${row.department}】\n${row.description || ''}\n\n${stepsText}\n`);
+        } catch (e) {
+          console.error('解析SOP内容失败:', e);
+          contextChunks.push(`【${row.title} - ${row.department}】\n${row.description || ''}\n`);
+        }
+      }
     }
 
     const relatedSOPs = Array.from(relatedSOPsMap.values());
