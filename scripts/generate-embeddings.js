@@ -56,7 +56,7 @@ async function generateEmbeddings() {
         try {
           // 生成嵌入
           const embeddingResponse = await openai.embeddings.create({
-            model: 'text-embedding-ada-002', // 1536维度，最稳定
+            model: 'text-embedding-3-small', // 1536维度，最新模型
             input: block.content,
           });
 

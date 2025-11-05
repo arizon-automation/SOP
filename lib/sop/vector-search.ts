@@ -38,7 +38,7 @@ export async function vectorSearch(
     // 1. 生成问题的向量嵌入
     console.log('   生成问题向量...');
     const embeddingResponse = await openai.embeddings.create({
-      model: 'text-embedding-ada-002',
+      model: 'text-embedding-3-small',
       input: question,
     });
 
