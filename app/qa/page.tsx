@@ -309,7 +309,7 @@ export default function QAPage() {
             onChange={(e) => setInput(e.target.value)}
             placeholder={language === 'zh' ? '输入你的问题...' : 'Type your question...'}
             disabled={loading}
-            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
+            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 text-gray-900 placeholder-gray-500"
           />
           <button
             type="submit"
