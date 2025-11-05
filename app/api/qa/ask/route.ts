@@ -27,14 +27,23 @@ export async function POST(request: NextRequest) {
 
     console.log(`💬 用户问题 (${language}): ${question}`);
 
-    // TODO: 未来可以使用向量嵌入进行更精确的语义搜索
-    // const embeddingResponse = await openai.embeddings.create({
-    //   model: 'text-embedding-ada-002',
-    //   input: question,
-    // });
+    // 提取关键词进行搜索（移除常见的停用词）
+    const stopWords = ['的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一', '个', '上', '也', '很', '到', '说', '要', '去', '你', '会', '着', '没有', '看', '好', '自己', '这', '什么', '怎么', '为什么', '哪里', '谁', '需要'];
+    const keywords = question
+      .split(/[\s,，。！？、]+/)
+      .filter(word => word.length > 1 && !stopWords.includes(word))
+      .slice(0, 5); // 最多取5个关键词
 
-    // 1. 从数据库中搜索相关的SOP（使用文本搜索）
-    // 首先尝试从content_blocks搜索，如果没有则直接从SOPs表搜索
+    console.log(`   提取关键词: ${keywords.join(', ')}`);
+
+    // 构建搜索条件（任意关键词匹配即可）
+    const searchPattern = keywords.map(kw => `%${kw}%`);
+    const searchConditions = keywords.map((_, index) => 
+      `(cb.content ILIKE $${index + 2} OR s.title ILIKE $${index + 2} OR s.description ILIKE $${index + 2})`
+    ).join(' OR ');
+
+    // 1. 从数据库中搜索相关的SOP（使用关键词搜索）
+    // 首先尝试从content_blocks搜索
     let searchResult = await query(
       `SELECT 
         cb.sop_id,
@@ -44,24 +53,19 @@ export async function POST(request: NextRequest) {
         s.department,
         s.category,
         s.language,
-        s.content as sop_content
+        s.content as sop_content,
+        (
+          CASE WHEN cb.content ILIKE $2 THEN 10 ELSE 0 END +
+          CASE WHEN s.title ILIKE $2 THEN 5 ELSE 0 END
+        ) as relevance_score
        FROM sop_content_blocks cb
        JOIN sops s ON cb.sop_id = s.id
        WHERE 
         s.language = $1
-        AND (
-          cb.content ILIKE $2
-          OR s.title ILIKE $2
-          OR s.description ILIKE $2
-        )
-       ORDER BY 
-        CASE 
-          WHEN cb.content ILIKE $2 THEN 1
-          WHEN s.title ILIKE $2 THEN 2
-          ELSE 3
-        END
-       LIMIT 5`,
-      [language, `%${question}%`]
+        AND (${searchConditions})
+       ORDER BY relevance_score DESC, s.created_at DESC
+       LIMIT 10`,
+      [language, ...searchPattern]
     );
 
     console.log(`   找到 ${searchResult.rows.length} 个内容块`);
@@ -69,6 +73,10 @@ export async function POST(request: NextRequest) {
     // 如果没有找到content blocks，直接从SOPs表搜索
     if (searchResult.rows.length === 0) {
       console.log('   尝试直接从SOPs表搜索...');
+      const sopSearchConditions = keywords.map((_, index) => 
+        `(s.title ILIKE $${index + 2} OR s.description ILIKE $${index + 2} OR s.content::text ILIKE $${index + 2})`
+      ).join(' OR ');
+      
       searchResult = await query(
         `SELECT 
           s.id as sop_id,
@@ -81,19 +89,10 @@ export async function POST(request: NextRequest) {
          FROM sops s
          WHERE 
           s.language = $1
-          AND (
-            s.title ILIKE $2
-            OR s.description ILIKE $2
-            OR s.content::text ILIKE $2
-          )
-         ORDER BY 
-          CASE 
-            WHEN s.title ILIKE $2 THEN 1
-            WHEN s.description ILIKE $2 THEN 2
-            ELSE 3
-          END
-         LIMIT 5`,
-        [language, `%${question}%`]
+          AND (${sopSearchConditions})
+         ORDER BY s.created_at DESC
+         LIMIT 10`,
+        [language, ...searchPattern]
       );
       console.log(`   从SOPs表找到 ${searchResult.rows.length} 个相关SOP`);
     }
