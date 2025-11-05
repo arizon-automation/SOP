@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { query } from '@/lib/db';
 import OpenAI from 'openai';
+import { vectorSearch, isVectorSearchAvailable } from '@/lib/sop/vector-search';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -27,78 +28,104 @@ export async function POST(request: NextRequest) {
 
     console.log(`💬 用户问题 (${language}): ${question}`);
 
-    // 提取关键词进行搜索（移除常见的停用词）
-    const stopWords = ['的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一', '个', '上', '也', '很', '到', '说', '要', '去', '你', '会', '着', '没有', '看', '好', '自己', '这', '什么', '怎么', '为什么', '哪里', '谁', '需要'];
-    const keywords = question
-      .split(/[\s,，。！？、]+/)
-      .filter(word => word.length > 1 && !stopWords.includes(word))
-      .slice(0, 5); // 最多取5个关键词
+    // 1. 检查向量搜索是否可用
+    const vectorSearchEnabled = await isVectorSearchAvailable();
+    console.log(`   向量搜索状态: ${vectorSearchEnabled ? '✅ 已启用' : '⚠️  未启用（使用关键词搜索）'}`);
 
-    console.log(`   提取关键词: ${keywords.join(', ')}`);
+    let searchResults: any[] = [];
 
-    // 构建搜索条件（任意关键词匹配即可）
-    const searchPattern = keywords.map(kw => `%${kw}%`);
-    const searchConditions = keywords.map((_, index) => 
-      `(cb.content ILIKE $${index + 2} OR s.title ILIKE $${index + 2} OR s.description ILIKE $${index + 2})`
-    ).join(' OR ');
-
-    // 1. 从数据库中搜索相关的SOP（使用关键词搜索）
-    // 首先尝试从content_blocks搜索
-    let searchResult = await query(
-      `SELECT 
-        cb.sop_id,
-        cb.content,
-        cb.block_order,
-        s.title,
-        s.department,
-        s.category,
-        s.language,
-        s.content as sop_content,
-        (
-          CASE WHEN cb.content ILIKE $2 THEN 10 ELSE 0 END +
-          CASE WHEN s.title ILIKE $2 THEN 5 ELSE 0 END
-        ) as relevance_score
-       FROM sop_content_blocks cb
-       JOIN sops s ON cb.sop_id = s.id
-       WHERE 
-        s.language = $1
-        AND (${searchConditions})
-       ORDER BY relevance_score DESC, s.created_at DESC
-       LIMIT 10`,
-      [language, ...searchPattern]
-    );
-
-    console.log(`   找到 ${searchResult.rows.length} 个内容块`);
-
-    // 如果没有找到content blocks，直接从SOPs表搜索
-    if (searchResult.rows.length === 0) {
-      console.log('   尝试直接从SOPs表搜索...');
-      const sopSearchConditions = keywords.map((_, index) => 
-        `(s.title ILIKE $${index + 2} OR s.description ILIKE $${index + 2} OR s.content::text ILIKE $${index + 2})`
-      ).join(' OR ');
-      
-      searchResult = await query(
-        `SELECT 
-          s.id as sop_id,
-          s.title,
-          s.description,
-          s.department,
-          s.category,
-          s.language,
-          s.content as sop_content
-         FROM sops s
-         WHERE 
-          s.language = $1
-          AND (${sopSearchConditions})
-         ORDER BY s.created_at DESC
-         LIMIT 10`,
-        [language, ...searchPattern]
-      );
-      console.log(`   从SOPs表找到 ${searchResult.rows.length} 个相关SOP`);
+    if (vectorSearchEnabled) {
+      // 使用向量语义搜索（终极方案！）
+      console.log('   🚀 使用向量语义搜索...');
+      try {
+        const vectorResults = await vectorSearch(question, language, 10);
+        searchResults = vectorResults.map(r => ({
+          sop_id: r.sopId,
+          content: r.content,
+          block_order: r.blockOrder,
+          title: r.title,
+          department: r.department,
+          category: r.category,
+          similarity: r.similarity,
+        }));
+      } catch (error: any) {
+        console.error('   ⚠️  向量搜索失败，回退到关键词搜索:', error.message);
+        // 回退到关键词搜索
+      }
     }
 
-    // 3. 如果没有找到相关内容，返回通用回复
-    if (searchResult.rows.length === 0) {
+    // 如果向量搜索失败或未启用，使用关键词搜索作为备选
+    if (searchResults.length === 0) {
+      console.log('   📝 使用关键词搜索...');
+      
+      // 提取关键词
+      const stopWords = ['的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一', '个', '上', '也', '很', '到', '说', '要', '去', '你', '会', '着', '没有', '看', '好', '自己', '这', '什么', '怎么', '为什么', '哪里', '谁', '需要'];
+      const keywords = question
+        .split(/[\s,，。！？、]+/)
+        .filter(word => word.length > 1 && !stopWords.includes(word))
+        .slice(0, 5);
+
+      console.log(`   关键词: ${keywords.join(', ')}`);
+
+      if (keywords.length > 0) {
+        const searchPattern = keywords.map(kw => `%${kw}%`);
+        const searchConditions = keywords.map((_, index) => 
+          `(cb.content ILIKE $${index + 2} OR s.title ILIKE $${index + 2} OR s.description ILIKE $${index + 2})`
+        ).join(' OR ');
+
+        const keywordResult = await query(
+          `SELECT 
+            cb.sop_id,
+            cb.content,
+            cb.block_order,
+            s.title,
+            s.department,
+            s.category
+           FROM sop_content_blocks cb
+           JOIN sops s ON cb.sop_id = s.id
+           WHERE 
+            s.language = $1
+            AND (${searchConditions})
+           ORDER BY s.created_at DESC
+           LIMIT 10`,
+          [language, ...searchPattern]
+        );
+
+        searchResults = keywordResult.rows;
+      }
+
+      // 如果还是没找到，从SOPs表搜索
+      if (searchResults.length === 0 && keywords.length > 0) {
+        const sopSearchConditions = keywords.map((_, index) => 
+          `(s.title ILIKE $${index + 2} OR s.description ILIKE $${index + 2} OR s.content::text ILIKE $${index + 2})`
+        ).join(' OR ');
+        const searchPattern = keywords.map(kw => `%${kw}%`);
+        
+        const sopResult = await query(
+          `SELECT 
+            s.id as sop_id,
+            s.title,
+            s.description,
+            s.department,
+            s.category,
+            s.content as sop_content
+           FROM sops s
+           WHERE 
+            s.language = $1
+            AND (${sopSearchConditions})
+           ORDER BY s.created_at DESC
+           LIMIT 10`,
+          [language, ...searchPattern]
+        );
+
+        searchResults = sopResult.rows;
+      }
+    }
+
+    console.log(`   找到 ${searchResults.length} 个相关内容`);
+
+    // 2. 如果没有找到相关内容，返回通用回复
+    if (searchResults.length === 0) {
       const noResultAnswer = language === 'zh'
         ? `抱歉，我在现有的SOP中没有找到与"${question}"相关的信息。\n\n可能的原因：\n1. 这个流程还没有被记录到SOP中\n2. 可以尝试用不同的关键词提问\n3. 查看SOP列表，看是否有类似的流程\n\n需要帮助创建新的SOP吗？`
         : `Sorry, I couldn't find information related to "${question}" in the existing SOPs.\n\nPossible reasons:\n1. This process hasn't been documented in an SOP yet\n2. Try asking with different keywords\n3. Check the SOP list for similar processes\n\nWould you like help creating a new SOP?`;
@@ -118,11 +145,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 4. 整理相关的SOP
+    // 3. 整理相关的SOP
     const relatedSOPsMap = new Map();
     const contextChunks: string[] = [];
 
-    for (const row of searchResult.rows) {
+    for (const row of searchResults) {
       if (!relatedSOPsMap.has(row.sop_id)) {
         relatedSOPsMap.set(row.sop_id, {
           id: row.sop_id,
