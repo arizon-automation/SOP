@@ -99,7 +99,9 @@ export default function QAPage() {
       });
 
       if (!res.ok) {
-        throw new Error('请求失败');
+        const errorData = await res.json().catch(() => ({ error: '未知错误' }));
+        console.error('API错误:', errorData);
+        throw new Error(errorData.error || `请求失败 (${res.status})`);
       }
 
       const data = await res.json();
@@ -113,15 +115,15 @@ export default function QAPage() {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('提问失败:', error);
       
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: language === 'zh' 
-          ? '抱歉，我遇到了一些问题。请稍后再试。'
-          : 'Sorry, I encountered an issue. Please try again later.',
+          ? `抱歉，我遇到了一些问题：${error.message}\n\n请检查：\n1. 服务器是否正常运行\n2. 数据库连接是否正常\n3. OpenAI API密钥是否配置`
+          : `Sorry, I encountered an issue: ${error.message}\n\nPlease check:\n1. Server is running\n2. Database connection\n3. OpenAI API key is configured`,
         timestamp: new Date(),
       };
 
